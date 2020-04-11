@@ -2,10 +2,10 @@ package icc.stud.kotov_av.russian_checkers;
 
 public class Main {
 
-    // TODO(inicialization field)
-    // TODO(inicialization window)
-
     public static void main(String[] args) {
+        Field field = new Field();
+        // TODO(inicialization window)
+        
         try {
             while (true) {
                 // TODO(get input)

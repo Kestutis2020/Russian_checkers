@@ -11,6 +11,6 @@ public class TestField {
         Field tFd = new Field();
 
         assertEquals(-2, tFd.writeCell(0, 0, Cell.EMPTY));
-        assertEquals(0, tFd.writeCell(0, 1, Cell.BLACK_CHECKER));
+        assertEquals(0, tFd.writeCell(0, 1, Cell.CHECKER_BLACK));
     }
 }

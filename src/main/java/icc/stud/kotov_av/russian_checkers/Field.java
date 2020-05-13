@@ -48,9 +48,9 @@ public class Field {
         }
     }
 
-    public Cell _readCell(int x, int y) throws Exception {
+    public Cell _readCell(int x, int y) {
         if ((x < 0 || x >= size) || (y < 0 || y >= size))
-            throw new Exception("out of bounds");
+            return null;
 
         return field[x][y];
     }

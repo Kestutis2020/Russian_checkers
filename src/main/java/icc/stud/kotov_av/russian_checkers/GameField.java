@@ -7,13 +7,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.JPanel;
+import javax.swing.ToolTipManager;
 
 public class GameField extends JPanel {
 
 	private static final long serialVersionUID = -931080932178052947L;
 
 	private static String[] ALPHABET = { "A", "B", "C", "D", "E", "F", "G", "H" };
-	private static String[] NUMBERS = { "1", "2", "3", "4", "5", "6", "7", "8" };
+	private static String[] NUMBERS  = { "1", "2", "3", "4", "5", "6", "7", "8" };
 
 	/*
 	 * Field with actual player	
@@ -25,6 +26,8 @@ public class GameField extends JPanel {
 	 */
 	private CheckerCell selectedToMoveCell;
 
+	boolean continueMoving = false;
+	
 	public GameField() {
 		setLayout(new GridLayout(10, 10));
 
@@ -33,14 +36,23 @@ public class GameField extends JPanel {
 
 			public void setSelected(boolean selected) {}
 			protected void setBackground() {}
+			
+			@Override
+			public String getToolTipText() {
+				return super.getToolTipText() + " - " + getPlayer().name();
+			}
 		};
 
 		playerIndicator.setName("PlayerIndicator");
+		playerIndicator.setToolTipText( "Следующий ход для игрока" );
 		
-		createGameField();
+		createGameField(true);
+
+		ToolTipManager.sharedInstance().setEnabled(true);
+		ToolTipManager.sharedInstance().registerComponent(playerIndicator);
 	}
 
-	public void createGameField() {
+	public void createGameField(boolean whithCheckers) {
 		removeAll();
 		
 		add( playerIndicator );
@@ -56,7 +68,7 @@ public class GameField extends JPanel {
 			add(new TextCell(rowName));
 
 			Player player = i < 3 ? Player.ONE : i > 4 && i < 5 ? null : Player.TWO;
-			boolean checker = i < 3 || i > 4 ? true : false;
+			boolean checker = i < 3 || i > 4 ? whithCheckers && true : false;
 			Point lastRow = i < 3 ? new Point(-1, 0) : i > 4 && i < 5 ? null : new Point(-1, 7);
 
 			for (int j = 0; j < 8; j++) {
@@ -86,7 +98,7 @@ public class GameField extends JPanel {
 		playerIndicator.setPlayer( Player.ONE );
 	}
 
-	public void setSelected(CheckerCell cell) {
+	protected void setSelected(CheckerCell cell) {
 		if( cell.isChecker() && cell.getPlayer() == playerIndicator.getPlayer() ) {
 		    if( this.selectedToMoveCell != null ) {
 		    	this.selectedToMoveCell.setSelected( false );
@@ -115,12 +127,15 @@ public class GameField extends JPanel {
 	 * Любой игрок может "есть" во всех направлениях
 	 */
 	public boolean moveCheck(CheckerCell selectedMoveToCell, ScoreListener listener ) {
-	    boolean result = selectedMoveToCell == selectedToMoveCell;
-		if( !result && selectedToMoveCell != null ) {
+		setSelected(selectedMoveToCell);
+
+		boolean result = selectedMoveToCell == selectedToMoveCell;
+		if( !result && selectedToMoveCell != null  && !selectedMoveToCell.isChecker() ) {
 			boolean queen = selectedToMoveCell.isQueen();
 
 			CheckingData checkData = getPathCheckData( selectedToMoveCell, selectedMoveToCell, null );
-			if( validatePath(checkData, false, queen) ) {
+			if(validatePath(checkData, false, queen)) 
+			{
 				clearFigures( checkData.fragCells );
 	
 				clearSelected( selectedToMoveCell );
@@ -134,16 +149,19 @@ public class GameField extends JPanel {
 				// проверить смежные клетки для cellMoveTo на наличие вражеских шашек, 
 				// возможен поворот и следующий ход ТОЛЬКО после факта "поедания" вражеской шашки или
 				// если selectedToMoveCell была "дамкой"
-		    	if( !validOtherPaths( selectedToMoveCell, selectedMoveToCell, checkData, queen ) ) 
+		    	if( !(checkData.fragPathLength > 0 && 
+		    			validOtherPaths( selectedToMoveCell, selectedMoveToCell, queen ))) 
 		    	{
 					playerIndicator.setPlayer(Player.invertPlayer(player));
 					playerIndicator.repaint();
 					
 					selectedToMoveCell = null;
+					continueMoving = false;
 		    	}
 		    	else {
 					selectedToMoveCell = selectedMoveToCell;
 					selectedToMoveCell.setSelected(true);
+					continueMoving = true;
 		    	}
 				
 				result = true;
@@ -170,10 +188,6 @@ public class GameField extends JPanel {
 				checkData.endPointEmpty && // 2
 				!checkData.containsOur; // 3
 		
-//		if( direction != null || from.isQueen() || 
-//				Direction.isDirectionCorrect( from.getPlayer().getDirections(), checkData.deltaX, checkData.deltaY ) ) 
-//		{
-				
 		if( result ) {
 			if( queen ) {
 				result = checkData.fragPathLength > 0 ? checkData.fragsInOrder : true;
@@ -183,8 +197,9 @@ public class GameField extends JPanel {
 					result = checkData.containsNearestFrag;
 				}
 				else {
-					result = checkData.pathLength == 1 || 
-							(checkData.pathLength == 2 && checkData.containsNearestFrag);
+					result = (continueMoving || checkData.validDirection) &&
+							 (checkData.pathLength == 1 || 
+							 (checkData.pathLength == 2 && checkData.containsNearestFrag));
 				}
 			}
 		}
@@ -197,44 +212,31 @@ public class GameField extends JPanel {
 	 * 2. "Дамке", если есть чужие шашки и ход возможен 
 	 * Необходимо исключить from, т.к. это начальная позиция
 	 */
-	private boolean validOtherPaths(CheckerCell from, CheckerCell to, CheckingData lastCheckData, boolean queen ) {
-		boolean result = lastCheckData.fragPathLength > 0;
-		if( result ) {
-			int deltaX = from.getXIndex() - to.getXIndex(); // нам нужен обратный знак
-			int deltaY = from.getYIndex() - to.getYIndex(); // нам нужен обратный знак
-			int signX = deltaX / Math.abs( deltaX );
-			int signY = deltaY / Math.abs( deltaY );
-			
-			System.out.print("\n\ncheck " + Direction.UP_LEFT + "... ");
-			// направление налево вверх
-			boolean fromDirection = Direction.UP_LEFT.equals( signX, signY );
-			CheckingData pathCheckData = !fromDirection ? getPathCheckData(to, null, Direction.UP_LEFT) : null; 
-			result = validatePath( pathCheckData, true, queen );
-			System.out.println( fromDirection ? "exclude" : result );
-			if( !result ) {
-				System.out.print("check "+ Direction.UP_RIGTH + "... ");
-				// направление направо вверх
-				fromDirection = Direction.UP_RIGTH.equals( signX, signY );
-				pathCheckData = !fromDirection ? getPathCheckData(to, null, Direction.UP_RIGTH) : null;
-				result = validatePath( pathCheckData, true, queen ); 
-				System.out.println( fromDirection ? "exclude" : result );
-			}
-			if( !result ) {
-				System.out.print("check "+ Direction.DOWN_LEFT + "... ");
-				// направление налево вниз
-				fromDirection = Direction.DOWN_LEFT.equals( signX, signY );
-				pathCheckData = !fromDirection ? getPathCheckData(to, null, Direction.DOWN_LEFT) : null; 
-				result = validatePath( pathCheckData, true, queen ); 
-				System.out.println( fromDirection ? "exclude" : result );
-			}
-			if( !result ) {
-				System.out.print("check "+ Direction.DOWN_RIGTH + "... ");
-				// направление направо вниз
-				fromDirection = Direction.DOWN_RIGTH.equals( signX, signY );
-				pathCheckData = !fromDirection ? getPathCheckData(to, null, Direction.DOWN_RIGTH) : null; 
-				result = validatePath( pathCheckData, true, queen ); 
-				System.out.println( fromDirection ? "exclude" : result );
-			}
+	private boolean validOtherPaths(CheckerCell from, CheckerCell to, boolean queen ) {
+		boolean result = false;
+
+		int deltaX = from.getXIndex() - to.getXIndex(); // нам нужен обратный знак
+		int deltaY = from.getYIndex() - to.getYIndex(); // нам нужен обратный знак
+		deltaX = deltaX / Math.abs( deltaX );
+		deltaY = deltaY / Math.abs( deltaY );
+		
+		// направление налево вверх
+		result = !Direction.UP_LEFT.equals( deltaX, deltaY ) && 
+				validatePath( getPathCheckData(to, null, Direction.UP_LEFT), true, queen );
+		if( !result ) {
+			// направление направо вверх
+			result = !Direction.UP_RIGTH.equals( deltaX, deltaY ) && 
+					validatePath( getPathCheckData(to, null, Direction.UP_RIGTH), true, queen ); 
+		}
+		if( !result ) {
+			// направление налево вниз
+			result = !Direction.DOWN_LEFT.equals( deltaX, deltaY ) && 
+					validatePath( getPathCheckData(to, null, Direction.DOWN_LEFT), true, queen ); 
+		}
+		if( !result ) {
+			// направление направо вниз
+			result = !Direction.DOWN_RIGTH.equals( deltaX, deltaY ) &&
+					validatePath( getPathCheckData(to, null, Direction.DOWN_RIGTH), true, queen ); 
 		}
 		return result;
 	}
@@ -256,16 +258,15 @@ public class GameField extends JPanel {
 			deltaY = direction.getDeltaY();
 		}
 
-		result.deltaX = deltaX;
-		result.deltaY = deltaY;
+		result.validDirection = Direction.isDirectionCorrect(from.getPlayer().getDirections(), deltaX, deltaY);
 		
 		int actualXIndex = from.getXIndex();
 		int actualYIndex = from.getYIndex();
 		
 		int lastIndex = -1;
 		int i = 1;
-		while((to != null && !checkBorder(to, actualXIndex, actualYIndex)) ||
-				(direction != null && !checkBorder(actualXIndex, actualYIndex))) {
+		while((to != null && !isInPoit(to, actualXIndex, actualYIndex)) ||
+				(direction != null && !isOutOfBorder(actualXIndex, actualYIndex))) {
 			
 			actualXIndex += deltaX;
 			actualYIndex += deltaY;
@@ -279,6 +280,7 @@ public class GameField extends JPanel {
 					if( i == 1 ) { 
 						boolean checkerNear = checkPointNear(from.getXIndex(), from.getYIndex(), checkerCell);
 						result.containsNearestFrag = checkerNear;
+						result.validDirection = true;
 					}
 					
 					// проверить пустые клетки между "вражескими" шашками:
@@ -312,12 +314,12 @@ public class GameField extends JPanel {
 	 * x=0 to 7
 	 * y=0 to 7
 	 */
-	private boolean checkBorder(int xIndex, int yIndex) {
-		boolean result = xIndex >= 0  && xIndex <= 7 && yIndex >= 0 && yIndex <= 7;
+	private boolean isOutOfBorder(int xIndex, int yIndex) {
+		boolean result = xIndex <= 0 || xIndex >= 7 || yIndex <= 0 || yIndex >= 7;
 		return result;
 	}
 
-	private boolean checkBorder(CheckerCell to, int xIndex, int yIndex) {
+	private boolean isInPoit(CheckerCell to, int xIndex, int yIndex) {
 		boolean result = xIndex == to.getXIndex() && yIndex == to.getYIndex();
 		return result;
 	}
@@ -373,18 +375,14 @@ public class GameField extends JPanel {
 	}
 
 	class CheckingData {
-		/*
-		 * Смещение вниз/вверх
-		 */
-		public int deltaX;
-		/*
-		 * Смещение вправо/влево
-		 */
-		public int deltaY;
 		/* 
 		 * длина пути
 		 */
 		int pathLength; 
+		/* 
+		 * направление движения правильное
+		 */
+		boolean validDirection; 
 		/* 
 		 * точка назначения не содержит шашку
 		 */

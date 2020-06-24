@@ -5,6 +5,7 @@ import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,6 +17,8 @@ import javax.swing.JOptionPane;
 
 import icc.stud.kotov_av.russian_checkers.actions.NewGameAction;
 import icc.stud.kotov_av.russian_checkers.actions.ShowScoreAction;
+import icc.stud.kotov_av.russian_checkers.actions.StartSetCheckersAction;
+import icc.stud.kotov_av.russian_checkers.actions.StopSetCheckersAction;
 
 public class Main implements ScoreListener {
 
@@ -23,6 +26,7 @@ public class Main implements ScoreListener {
 	private GameField gameField;
 	private List<ScoreData> scoreData;
 	private ScoreLine scoreLine;
+	private MouseAdapter gameMouseListener;
 
 	public static void main(String[] args) {
 		EventQueue.invokeLater(new Runnable() {
@@ -61,6 +65,8 @@ public class Main implements ScoreListener {
 		
 		menu.add( new JMenuItem(new NewGameAction( this )) );
 		menu.add( new JMenuItem(new ShowScoreAction( this )) );
+		menu.add( new JMenuItem(new StartSetCheckersAction( this )) );
+		menu.add( new JMenuItem(new StopSetCheckersAction( this )) );
 
 		frame.setJMenuBar(menubar);
 		
@@ -71,14 +77,12 @@ public class Main implements ScoreListener {
 		scoreLine = new ScoreLine( "Ход: " );
 		frame.getContentPane().add( scoreLine, BorderLayout.SOUTH ); 
 		
-		gameField.addMouseListener(new MouseAdapter() {
+		gameMouseListener = new MouseAdapter() {
 			public void mouseClicked(MouseEvent evt) {
 				GameField gameField = (GameField) evt.getComponent();
 
 				CheckerCell cell = gameField.getCheckerCell(evt.getX(), evt.getY());
 				if ( cell!= null ) {
-					gameField.setSelected(cell);
-
 					if (!gameField.moveCheck(cell, Main.this)) {
 						JOptionPane.showMessageDialog(frame, 
 								"Ход не доступен!", 
@@ -103,7 +107,8 @@ public class Main implements ScoreListener {
 					}
 				}
 			}
-		});
+		};
+		gameField.addMouseListener(gameMouseListener);
 	}
 
 	public void createNewGame() {
@@ -115,11 +120,31 @@ public class Main implements ScoreListener {
 		
 		scoreLine.setValue("");
 		
-		gameField.createGameField();
+		gameField.createGameField(true);
+		gameField.revalidate();
+		gameField.repaint();
+	}
+	
+	public void clearGameField() {
+		for (Player player : Player.values()) {
+			player.resetFigureCount();
+		}
+
+		getScoreData().clear();
+		
+		scoreLine.setValue("");
+		
+		gameField.createGameField(false);
+		gameField.removeMouseListener( gameMouseListener );
+		
 		gameField.revalidate();
 		gameField.repaint();
 	}
 
+	public GameField getGameField() {
+		return gameField;
+	}
+	
 	public List<ScoreData> getScoreData() {
 		if( scoreData == null ) {
 			scoreData = new ArrayList<ScoreData>(23);
@@ -132,5 +157,16 @@ public class Main implements ScoreListener {
 		getScoreData().add( data );
 		
 		scoreLine.setValue( data.toString() );
+	}
+
+	public void stopTestSetup() {
+		for (MouseListener listener : gameField.getMouseListeners()) {
+			gameField.removeMouseListener( listener );
+		}
+		
+		gameField.addMouseListener( gameMouseListener );
+		
+		gameField.revalidate();
+		gameField.repaint();
 	}
 }
